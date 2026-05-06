@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Turbine Showcase</title>
+<style>
+  :root {
+    --bg-0: #0a0c0f;
+    --bg-1: #14181d;
+    --ink: #e8e6e1;
+    --dim: #6f7780;
+    --accent: oklch(72% 0.12 65);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg-0);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* Loading */
+  #loader {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--bg-0);
+    z-index: 50;
+    transition: opacity 0.6s ease;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+  .load-bar {
+    width: 240px; height: 2px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden; margin-top: 18px;
+  }
+  .load-bar > div {
+    height: 100%; width: 0%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+  .load-text {
+    font-size: 11px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  .load-pct {
+    margin-top: 12px; font-size: 11px; color: var(--ink);
+    letter-spacing: 0.1em;
+  }
+
+  /* HUD */
+  .hud {
+    position: fixed; pointer-events: none;
+    z-index: 10; color: var(--ink);
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  }
+  .hud-tl { top: 28px; left: 32px; }
+  .hud-tr { top: 28px; right: 32px; text-align: right; }
+  .hud-br { bottom: 28px; right: 32px; text-align: right; pointer-events: auto;}
+  .label-mini {
+    font-size: 10px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  .label-rule {
+    width: 28px; height: 1px;
+    background: var(--accent);
+    margin: 8px 0;
+  }
+  .hud-tr .label-rule { margin-left: auto; }
+
+  /* Caption */
+  #caption {
+    position: fixed; left: 32px; bottom: 28px;
+    z-index: 10; pointer-events: none;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    max-width: 520px;
+    transition: opacity 0.45s ease;
+  }
+  .cap-index {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.28em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .cap-name {
+    font-size: 44px; font-weight: 300;
+    letter-spacing: -0.01em;
+    margin-top: 6px; line-height: 1;
+  }
+  .cap-sub {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.16em;
+    color: var(--dim);
+    margin-top: 12px;
+    text-transform: uppercase;
+  }
+
+  /* Progress dots */
+  .dots {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 6px; justify-content: flex-end;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 50%;
+    transition: all 0.4s ease;
+  }
+  .dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 14px var(--accent);
+  }
+  .dot.done {
+    background: rgba(255,255,255,0.45);
+  }
+
+  /* Timeline bar */
+  #timeline {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: rgba(255,255,255,0.05);
+    z-index: 8;
+  }
+  #timeline > div {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+
+  /* Controls */
+  .ctrl {
+    pointer-events: auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(20,24,29,0.7);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 14px;
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+    cursor: pointer;
+    user-select: none;
+  }
+  .ctrl:hover { border-color: var(--accent); color: var(--accent); }
+  .ctrl.active { border-color: var(--accent); color: var(--accent); background: rgba(217, 119, 87, 0.08); }
+  .ctrl-group { display: inline-flex; gap: 6px; justify-content: flex-end; }
+
+  /* Speed toggle */
+  .speed-row {
+    display: flex; align-items: center; gap: 10px;
+    justify-content: flex-end; margin-top: 8px;
+    pointer-events: auto;
+  }
+  .speed-label {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--dim);
+    user-select: none;
+  }
+  .speed-val {
+    font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.12em;
+    color: var(--accent); min-width: 28px; text-align: right;
+    user-select: none;
+  }
+  #speed-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 80px; height: 2px;
+    background: rgba(255,255,255,0.12);
+    outline: none; cursor: pointer;
+    border-radius: 0;
+  }
+  #speed-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent);
+  }
+  #speed-slider::-moz-range-thumb {
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border: none; border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* Crosshair marks */
+  .corner {
+    position: fixed; width: 12px; height: 12px;
+    border: 1px solid rgba(255,255,255,0.18);
+    z-index: 5;
+  }
+  .corner.tl { top: 14px; left: 14px; border-right: none; border-bottom: none; }
+  .corner.tr { top: 14px; right: 14px; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: 14px; left: 14px; border-right: none; border-top: none; }
+  .corner.br { bottom: 14px; right: 14px; border-left: none; border-top: none; }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<!-- Crosshair corners -->
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- HUD -->
+<div class="hud hud-tl">
+  <div class="label-mini">Turbine ⁄ Showcase</div>
+  <div class="label-rule"></div>
+  <div class="label-mini" style="color: var(--ink); font-size: 11px; letter-spacing: 0.22em;">REV 02 · 2026</div>
+</div>
+
+<div class="hud hud-tr">
+  <div class="label-mini">Sequence</div>
+  <div class="label-rule"></div>
+  <div class="dots">
+    <div class="dot" id="dot-0"></div>
+    <div class="dot" id="dot-1"></div>
+    <div class="dot" id="dot-2"></div>
+  </div>
+</div>
+
+<!-- Caption (bottom-left) -->
+<div id="caption">
+  <div class="cap-index" id="cap-index">01 / 03</div>
+  <div class="cap-name" id="cap-name">Prototype 1</div>
+  <div class="cap-sub" id="cap-sub">Iteration A</div>
+</div>
+
+<!-- Controls (bottom-right) -->
+<div class="hud hud-br">
+  <div class="ctrl-group">
+    <div class="ctrl" id="prev-btn" title="Previous">‹ PREV</div>
+    <div class="ctrl" id="lock-btn" title="Lock on current">
+      <span id="lock-label">Auto</span>
+    </div>
+    <div class="ctrl" id="next-btn" title="Next">NEXT ›</div>
+  </div>
+  <div class="ctrl-group" style="margin-top: 8px;">
+    <div class="ctrl" id="play-btn">
+      <span id="play-label">Pause</span>
+    </div>
+  </div>
+  <div class="speed-row">
+    <span class="speed-label">Speed</span>
+    <input type="range" id="speed-slider" min="0" max="100" value="50">
+    <span class="speed-val" id="speed-val">1×</span>
+  </div>
+</div>
+
+<!-- Timeline -->
+<div id="timeline"><div id="timeline-fill"></div></div>
+
+<!-- Loader -->
+<div id="loader">
+  <div class="load-text">Loading geometry</div>
+  <div class="load-bar"><div id="load-fill"></div></div>
+  <div class="load-pct" id="load-pct">0%</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ---------- Scene setup ----------
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0a0c0f');
+
+// Environment map for proper PBR reflections
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = envTex;
+
+const camera = new THREE.PerspectiveCamera(32, window.innerWidth / window.innerHeight, 0.1, 200);
+// Default view: mostly side-profile, slightly turned + a touch from above for depth
+camera.position.set(0.6, 1.2, 9);
+camera.lookAt(0, 0, 0);
+
+// ---------- Lights — soft studio ----------
+const hemi = new THREE.HemisphereLight(0x9eb4cc, 0x16191e, 0.5);
+scene.add(hemi);
+
+// Key — large soft warm
+const key = new THREE.DirectionalLight(0xfff1de, 1.6);
+key.position.set(7, 9, 6);
+scene.add(key);
+
+// Fill — cool, gentle
+const fill = new THREE.DirectionalLight(0x9bc1e6, 0.55);
+fill.position.set(-9, 3, 5);
+scene.add(fill);
+
+// Rim — warm halo on silhouette
+const rim = new THREE.DirectionalLight(0xffc28a, 1.1);
+rim.position.set(-3, 5, -8);
+scene.add(rim);
+
+// Subtle camera-side bounce
+const front = new THREE.DirectionalLight(0xffffff, 0.18);
+front.position.set(0, 1, 10);
+scene.add(front);
+
+// ---------- Floor + grid ("scored lines") ----------
+scene.fog = new THREE.Fog('#0a0c0f', 14, 38);
+
+const floorGeo = new THREE.PlaneGeometry(120, 120);
+const floorMat = new THREE.MeshPhysicalMaterial({
+  color: 0x12161b,
+  roughness: 0.22,
+  metalness: 0.4,
+  envMapIntensity: 0.6,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -2.6;
+scene.add(floor);
+
+// Pedestal disk removed — whole floor is now reflective
+
+// Subtle grid — the "scored lines"
+const grid = new THREE.GridHelper(60, 60, 0x2a3340, 0x1a1f25);
+grid.position.y = -2.59;
+grid.material.opacity = 0.55;
+grid.material.transparent = true;
+scene.add(grid);
+
+// ---------- Load turbines ----------
+const loader = new STLLoader();
+const TURBINE_PATHS = [
+  'models/turbine-1.stl',
+  'models/turbine-2.stl',
+  'models/turbine-3.stl',
+];
+
+const TURBINE_NAMES = [
+  { idx: '01 / 03', name: 'Prototype 1', sub: 'Iteration A' },
+  { idx: '02 / 03', name: 'Prototype 2', sub: 'Iteration B' },
+  { idx: '03 / 03', name: 'Prototype 3', sub: 'Iteration C' },
+];
+
+// Distinct material per turbine for visual differentiation
+function makeMaterial(color, metalness, roughness) {
+  return new THREE.MeshPhysicalMaterial({
+    color, metalness, roughness,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.18,
+    envMapIntensity: 1.15,
+    flatShading: false,
+    transparent: true, opacity: 1.0,
+  });
+}
+
+// Polished aluminium — a touch warmer than pure grey, brighter for elegance
+const ALUMINIUM = 0xdde0e5;
+const MATERIALS = [
+  makeMaterial(ALUMINIUM, 0.88, 0.22),
+  makeMaterial(ALUMINIUM, 0.88, 0.22),
+  makeMaterial(ALUMINIUM, 0.88, 0.22),
+];
+
+const turbines = []; // { pivot, mesh, material }
+const loadProgress = [0, 0, 0];
+
+function updateLoaderUI() {
+  const total = loadProgress.reduce((a, b) => a + b, 0) / 3;
+  document.getElementById('load-fill').style.width = (total * 100) + '%';
+  document.getElementById('load-pct').textContent = Math.round(total * 100) + '%';
+}
+
+/**
+ * Models are flat discs (X/Y wide, Z thin). Z is the shaft axis.
+ * For a "water-wheel" pose:
+ *   - We want the shaft horizontal across the screen → align shaft to world X.
+ *   - Currently the shaft is along world Z. So we rotate the geometry by 90°
+ *     around world Y so the disc face points along world Z (visible to camera)
+ *     — wait: if shaft = X, disc faces ±X. We want the camera (looking down -Z)
+ *     to see the disc edge-on like a water wheel viewed from the side.
+ *   - Yes — water wheels are viewed from the side; you see the disc as a circle
+ *     with the shaft going left-right.
+ *   - To get shaft along X: rotate geom by 90° around world Y. (Z axis maps to X.)
+ *   - Then spin around X axis.
+ */
+function loadOne(i) {
+  return new Promise((resolve, reject) => {
+    loader.load(
+      TURBINE_PATHS[i],
+      (geom) => {
+        geom.computeVertexNormals();
+        // Reorient: rotate -90° around Y so original Z becomes X (shaft → X)
+        geom.rotateY(Math.PI / 2);
+        // Then rotate the disc face 180° to the right (two 90° turns)
+        geom.rotateX(-Math.PI);
+
+        geom.computeBoundingBox();
+        const bb = geom.boundingBox;
+        const size = new THREE.Vector3();
+        bb.getSize(size);
+        const center = new THREE.Vector3();
+        bb.getCenter(center);
+        // Center geometry on origin
+        geom.translate(-center.x, -center.y, -center.z);
+
+        // Scale so the disc diameter (Y or Z, whichever larger after rotate) ≈ 4 units
+        geom.computeBoundingBox();
+        const newSize = new THREE.Vector3();
+        geom.boundingBox.getSize(newSize);
+        const diameter = Math.max(newSize.y, newSize.z);
+        const target = 4.0;
+        const scale = target / diameter;
+        geom.scale(scale, scale, scale);
+
+        const mesh = new THREE.Mesh(geom, MATERIALS[i]);
+
+        // Inner pivot: handles continuous spin around the shaft (local X)
+        const pivot = new THREE.Group();
+        pivot.add(mesh);
+
+        // Outer group: handles user drag orientation (yaw/pitch)
+        const orbitGroup = new THREE.Group();
+        orbitGroup.add(pivot);
+        orbitGroup.position.set(0, 0, 0); // centered on screen
+        orbitGroup.visible = false;       // hidden until activated
+        scene.add(orbitGroup);
+
+        turbines[i] = { orbitGroup, pivot, mesh, material: MATERIALS[i] };
+        resolve();
+      },
+      (xhr) => {
+        if (xhr.lengthComputable) {
+          loadProgress[i] = xhr.loaded / xhr.total;
+        } else {
+          loadProgress[i] = Math.min(0.95, loadProgress[i] + 0.02);
+        }
+        updateLoaderUI();
+      },
+      (err) => reject(err)
+    );
+  });
+}
+
+// ---------- Animation timing ----------
+const PHASE_HOLD = 7.5;     // seconds showing each turbine fully
+const PHASE_FADE = 1.2;     // seconds crossfading to next
+const PHASE_TOTAL = PHASE_HOLD + PHASE_FADE;
+const LOOP_TOTAL = PHASE_TOTAL * 3;
+
+// Spin rates (rad/sec) — base values, multiplied by spinSpeed
+const SPIN_RATES = [1.4, 1.4, 1.4];
+let spinSpeed = 1.0; // controlled by slider
+
+const speedSlider = document.getElementById('speed-slider');
+const speedVal    = document.getElementById('speed-val');
+speedSlider.addEventListener('input', () => {
+  // slider 0–100 → speed 0.1× – 4×, midpoint (50) = 1×
+  const t = speedSlider.value / 100;
+  spinSpeed = 0.1 + t * t * 3.9;
+  const label = spinSpeed < 0.95 ? spinSpeed.toFixed(1) + '×'
+              : spinSpeed > 1.05 ? spinSpeed.toFixed(1) + '×'
+              : '1×';
+  speedVal.textContent = label;
+});
+
+let elapsed = 0;
+let isPlaying = true;
+let isLocked = false;       // lock on current turbine, stop auto-advance
+let lockedSlot = 0;         // which turbine is locked
+
+// User-controlled orientation (drag with mouse)
+// Default: stronger 3/4 angle showing blade depth, top stays upright
+let userYaw = 1.05;
+let userPitch = 0.0;
+
+// Each turbine carries its own spin angle so it keeps spinning even when fading
+const spinAngles = [0, 0, 0];
+
+function smoothstep(t) {
+  t = Math.max(0, Math.min(1, t));
+  return t * t * (3 - 2 * t);
+}
+
+function updateCaption(slotIndex) {
+  const data = TURBINE_NAMES[slotIndex];
+  document.getElementById('cap-index').textContent = data.idx;
+  document.getElementById('cap-name').textContent = data.name;
+  document.getElementById('cap-sub').textContent = data.sub;
+
+  for (let i = 0; i < 3; i++) {
+    const dot = document.getElementById('dot-' + i);
+    dot.classList.remove('active', 'done');
+    if (i < slotIndex) dot.classList.add('done');
+    if (i === slotIndex) dot.classList.add('active');
+  }
+}
+
+let lastCaptionSlot = -1;
+
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  if (isPlaying && !isLocked) {
+    elapsed += dt;
+    if (elapsed >= LOOP_TOTAL) elapsed = elapsed % LOOP_TOTAL;
+  }
+
+  // Always advance spin (even paused, but slower so they don't fully freeze)
+  const spinMul = isPlaying ? spinSpeed : 0.15;
+  for (let i = 0; i < 3; i++) {
+    spinAngles[i] += SPIN_RATES[i] * dt * spinMul;
+    if (turbines[i]) {
+      turbines[i].pivot.rotation.x = spinAngles[i];
+    }
+  }
+
+  // Phase logic: HOLD on current, then FADE to next
+  let phaseIndex, phaseLocal, nextIndex;
+  if (isLocked) {
+    phaseIndex = lockedSlot;
+    phaseLocal = 0; // always in HOLD
+    nextIndex = lockedSlot;
+  } else {
+    phaseIndex = Math.floor(elapsed / PHASE_TOTAL) % 3;
+    phaseLocal = elapsed - Math.floor(elapsed / PHASE_TOTAL) * PHASE_TOTAL;
+    nextIndex = (phaseIndex + 1) % 3;
+  }
+
+  let currentOpacity = 1;
+  let nextOpacity = 0;
+  if (phaseLocal < PHASE_HOLD) {
+    currentOpacity = 1;
+    nextOpacity = 0;
+  } else {
+    const t = (phaseLocal - PHASE_HOLD) / PHASE_FADE;
+    const s = smoothstep(t);
+    currentOpacity = 1 - s;
+    nextOpacity = s;
+  }
+
+  // Apply visibility / opacity to all 3
+  for (let i = 0; i < 3; i++) {
+    if (!turbines[i]) continue;
+    let op = 0;
+    if (i === phaseIndex) op = currentOpacity;
+    else if (i === nextIndex) op = nextOpacity;
+    turbines[i].orbitGroup.visible = op > 0.001;
+    turbines[i].material.opacity = op;
+    turbines[i].material.depthWrite = op > 0.5; // avoid z-fighting on fade
+
+    // Apply shared user-drag orientation to all turbines so it persists
+    // through transitions
+    turbines[i].orbitGroup.rotation.y = userYaw;
+    turbines[i].orbitGroup.rotation.x = userPitch;
+  }
+
+  // Caption: switch to next slot at the midpoint of the fade
+  let captionSlot = phaseIndex;
+  if (phaseLocal >= PHASE_HOLD + PHASE_FADE * 0.5) captionSlot = nextIndex;
+
+  if (captionSlot !== lastCaptionSlot) {
+    // fade caption: simple opacity flip via class is overkill; just snap on midfade
+    const cap = document.getElementById('caption');
+    cap.style.opacity = 0;
+    setTimeout(() => {
+      updateCaption(captionSlot);
+      cap.style.opacity = 1;
+    }, 200);
+    lastCaptionSlot = captionSlot;
+  }
+
+  // Timeline
+  document.getElementById('timeline-fill').style.width =
+    ((elapsed / LOOP_TOTAL) * 100) + '%';
+
+  renderer.render(scene, camera);
+}
+
+// ---------- Resize ----------
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- Play / Pause ----------
+const playBtn = document.getElementById('play-btn');
+const playLabel = document.getElementById('play-label');
+playBtn.addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  playLabel.textContent = isPlaying ? 'Pause' : 'Play';
+});
+
+// ---------- Drag to reorient ----------
+let isDragging = false;
+let dragMoved = false;
+let dragStartX = 0, dragStartY = 0;
+let yawAtDragStart = 0, pitchAtDragStart = 0;
+const DRAG_THRESHOLD = 4; // pixels before it counts as drag (vs click)
+
+renderer.domElement.style.cursor = 'grab';
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  isDragging = true;
+  dragMoved = false;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  yawAtDragStart = userYaw;
+  pitchAtDragStart = userPitch;
+  renderer.domElement.style.cursor = 'grabbing';
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+  if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) dragMoved = true;
+  // 0.5° per pixel
+  const sensitivity = 0.005;
+  userYaw   = yawAtDragStart   + dx * sensitivity;
+  userPitch = pitchAtDragStart + dy * sensitivity;
+  // Clamp pitch so users can't fully invert
+  userPitch = Math.max(-Math.PI / 2 + 0.1,
+              Math.min( Math.PI / 2 - 0.1, userPitch));
+});
+
+function endDrag(e) {
+  if (!isDragging) return;
+  isDragging = false;
+  renderer.domElement.style.cursor = 'grab';
+  try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+
+// Click (without drag) to skip to next turbine
+renderer.domElement.addEventListener('click', () => {
+  if (dragMoved) return; // it was a drag, not a click
+  goToSlot((currentSlot() + 1) % 3);
+});
+
+function currentSlot() {
+  if (isLocked) return lockedSlot;
+  return Math.floor(elapsed / PHASE_TOTAL) % 3;
+}
+
+function goToSlot(i) {
+  if (isLocked) {
+    lockedSlot = i;
+  } else {
+    // Snap to start of that slot's hold
+    elapsed = i * PHASE_TOTAL + 0.01;
+  }
+}
+
+// Prev / Next / Lock buttons
+document.getElementById('prev-btn').addEventListener('click', () => {
+  goToSlot((currentSlot() + 2) % 3);
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  goToSlot((currentSlot() + 1) % 3);
+});
+const lockBtn = document.getElementById('lock-btn');
+const lockLabel = document.getElementById('lock-label');
+lockBtn.addEventListener('click', () => {
+  if (!isLocked) {
+    // Engage lock — fix on currently shown turbine
+    lockedSlot = currentSlot();
+    isLocked = true;
+    lockBtn.classList.add('active');
+    lockLabel.textContent = 'Locked';
+  } else {
+    isLocked = false;
+    // Resume from locked slot's hold start
+    elapsed = lockedSlot * PHASE_TOTAL + 0.01;
+    lockBtn.classList.remove('active');
+    lockLabel.textContent = 'Auto';
+  }
+});
+
+// Double-click to reset orientation
+renderer.domElement.addEventListener('dblclick', () => {
+  userYaw = 1.05;
+  userPitch = 0.0;
+});
+
+// ---------- Boot ----------
+(async () => {
+  try {
+    await loadOne(0);
+    await loadOne(1);
+    await loadOne(2);
+    document.getElementById('loader').classList.add('hidden');
+    setTimeout(() => {
+      const l = document.getElementById('loader');
+      if (l) l.remove();
+    }, 700);
+    updateCaption(0);
+    lastCaptionSlot = 0;
+    animate();
+  } catch (err) {
+    console.error('Load failed:', err);
+    document.getElementById('load-pct').textContent = 'Error loading models';
+  }
+})();
+</script>
+</body>
+</html>
